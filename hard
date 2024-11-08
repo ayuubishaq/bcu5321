@@ -11,10 +11,12 @@ CSR_SSH2 = {
 }
 
 hardening_lines = [
-    "hostname",
-    "no service password-recovery",
-    "logging buffered 4096",
-    "logging trap informational",
+    "hostname",  # Set hostname to identify the device
+    "no ip http server",  # Disable HTTP server
+    "service password-encryption",  # Encrypt passwords in configuration
+    "ip ssh time-out 60",  # Set SSH time-out to 60 seconds
+    "ip ssh authentication-retries 3",  # Limit SSH authentication retries
+    "banner login ^CUnauthorized access is prohibited^C",  # Set a login banner for legal warning
     "ip domain-name example.com",
     "enable secret",
 ]
