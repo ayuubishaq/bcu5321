@@ -1,0 +1,55 @@
+from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
+
+CSR_SSH2 = {
+    'device_type': 'cisco_ios',
+    'host': '192.168.56.101',
+    'username': 'cisco',
+    'password': 'cisco123!',
+    'secret': 'cisco123!',
+    'port': 22,
+    'timeout': 10,
+}
+
+hardening_lines = [
+    "hostname",
+    "no service password-recovery",
+    "logging buffered 4096",
+    "logging trap informational",
+    "ip domain-name example.com",
+    "enable secret",
+]
+
+try:
+    net_connection = ConnectHandler(**CSR_SSH2)
+    if not net_connection.check_enable_mode():
+        net_connection.enable()
+
+    running_configuration = net_connection.send_command('show running-config')
+    with open('running_configuration_ssh_netmiko.txt', 'w') as file:
+        file.write(running_configuration)
+
+    hardening_lines_omitted = [line for line in hardening_lines if line not in running_configuration]
+    if hardening_lines_omitted:
+        print("The following hardening configurations are missing:")
+        for line in hardening_lines_omitted:
+            print(line)
+    else:
+        print("The device configuration meets all hardening guidelines.")
+
+    syslog_server_ip = '192.168.56.200'
+    syslog_config_commands = [
+        f'logging host {syslog_server_ip}',
+        'logging trap informational',
+    ]
+    net_connection.send_config_set(syslog_config_commands)
+    net_connection.save_config()
+    net_connection.disconnect()
+
+    print("Syslog has been configured successfully and changes have been saved.")
+
+except NetmikoAuthenticationException:
+    print("Authentication failed. Please check the username or password.")
+except NetmikoTimeoutException:
+    print("Connection timed out. Ensure the device is accessible and SSH is enabled.")
+except Exception:
+    print("An unexpected error occurred.")
