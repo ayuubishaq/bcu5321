@@ -1,0 +1,96 @@
+from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
+from datetime import datetime
+
+# First router details
+first_router = {
+    'device_type': 'cisco_ios',
+    'host': '192.168.56.101',
+    'username': 'cisco',
+    'password': 'cisco123!',
+    'secret': 'cisco123!',
+    'port': 22,
+    'timeout': 20,
+}
+
+# Second router details
+second_router = {
+    'device_type': 'cisco_ios',
+    'host': '192.168.56.130',
+    'username': 'cisco',
+    'password': 'cisco123!',
+    'secret': 'cisco123!',
+    'port': 22,
+    'timeout': 20,
+}
+
+# Unified ACL and IPSec configuration
+def acl_and_ipsec_configuration():
+    """
+    Generate all ACL and IPSec configuration commands in one function.
+    """
+    return [
+        # General ACL for traffic control
+        'ip access-list extended SECURE_TRAFFIC',  # Unified ACL name
+        'permit tcp any any eq 80',  # Allow HTTP traffic
+        'permit tcp any any eq 443',  # Allow HTTPS traffic
+        'deny ip any any',  # Deny all other inbound traffic
+
+        # ISAKMP Phase 1 policy
+        "crypto isakmp policy 10",
+        "encryption aes",
+        "hash sha256",
+        "authentication pre-share",
+        "group 14",
+
+        # IPSec transform set
+        "crypto ipsec transform-set myset esp-aes esp-sha256-hmac",
+
+        # Crypto map configuration
+        "crypto map mymap 10 ipsec-isakmp",
+        "set transform-set myset",
+        "match address SECURE_TRAFFIC",  # Match the unified ACL
+
+        # Apply crypto map to an interface
+        "interface GigabitEthernet0/1",
+        "crypto map mymap",
+    ]
+
+# Function to apply configuration to a router
+def configure_router(router, config_commands):
+    """
+    Connect to the router, apply configuration, and save it.
+    """
+    try:
+        net_connection = ConnectHandler(**router)
+
+        # Enter enable mode
+        if not net_connection.check_enable_mode():
+            net_connection.enable()
+
+        # Backup current configuration
+        run_config = net_connection.send_command('show running-config')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f'run_config_{router["host"]}_{timestamp}.txt'
+        with open(filename, 'w') as file:
+            file.write(run_config)
+
+        # Apply configuration commands
+        net_connection.send_config_set(config_commands)
+        print(f"Configuration applied to {router['host']}.")
+
+        # Save configuration
+        net_connection.save_config()
+        net_connection.disconnect()
+    except NetmikoAuthenticationException:
+        print(f"Authentication failed for {router['host']}.")
+    except NetmikoTimeoutException:
+        print(f"Connection timed out for {router['host']}.")
+    except Exception as e:
+        print(f"Error with {router['host']}: {e}")
+
+# Create unified configuration commands
+acl_config_commands = acl_and_ipsec_configuration()
+
+# Apply configurations to the routers
+configure_router(first_router, acl_config_commands)
+configure_router(second_router, acl_config_commands)
